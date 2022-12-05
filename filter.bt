@@ -1,0 +1,41 @@
+#!/usr/bin/env bpftrace
+BEGIN {
+	@smid = (int64) 0xdeadbeef;
+	@origin = str($1);
+	@path = str($2);
+	printf("Tracing host = %s, path = %s...\n", @origin, @path);
+}
+
+usdt:/opt/ats/bin/traffic_server:ats_httpsm:parse_result_done
+{
+	// Try to match
+	if (str(arg0, arg1) == @origin && str(arg2, arg3) == @path) {
+		@smid = (int64)arg4;
+		printf("matched sm_id: %d\n", arg4);
+	}
+}
+
+usdt:/opt/ats/bin/traffic_server:ats_httpsm_state:*
+/ (int64) arg0 == @smid /
+{
+	printf("%s: event = %d\n", probe, arg1);
+}
+
+usdt:/opt/ats/bin/traffic_server:ats_cachesm_state:*
+/ (int64) arg0 == @smid /
+{
+	printf("%s: event = %d\n", probe, arg1);
+}
+
+usdt:/opt/ats/bin/traffic_server:ats_cachesm:*
+/ (int64) arg0 == @smid /
+{
+	printf("%s\n", probe);
+}
+
+usdt:/opt/ats/bin/traffic_server:ats_httpsm:new_origin_server_connection
+/ (int64) arg0 == @smid /
+{
+	@origin_server[arg0] = str(arg1);
+	printf("New origin connection: %s\n", @origin_server[arg0]);
+}
